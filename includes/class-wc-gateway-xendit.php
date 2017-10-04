@@ -93,17 +93,17 @@ class WC_Gateway_Xendit extends WC_Payment_Gateway_CC {
 		$this->supports             = array(
 			'subscriptions',
 			'products',
-			// 'refunds',
-			// 'subscription_cancellation',
-			// 'subscription_reactivation',
-			// 'subscription_suspension',
-			// 'subscription_amount_changes',
-			// 'subscription_payment_method_change', // Subs 1.n compatibility.
-			// 'subscription_payment_method_change_admin',
-			// 'subscription_date_changes',
-			// 'multiple_subscriptions',
+			'refunds',
+			'subscription_cancellation',
+			'subscription_reactivation',
+			'subscription_suspension',
+			'subscription_amount_changes',
+			'subscription_payment_method_change', // Subs 1.n compatibility.
+			'subscription_payment_method_change_admin',
+			'subscription_date_changes',
+			'multiple_subscriptions',
 			'tokenization',
-			// 'add_payment_method',
+			'add_payment_method'
 		);
 
 		// Load the form fields.
@@ -359,37 +359,15 @@ class WC_Gateway_Xendit extends WC_Payment_Gateway_CC {
 	 * @param  object $source
 	 * @return array()
 	 */
-	protected function generate_payment_request( $order, $source ) {
+	protected function generate_payment_request( $order ) {
 
 		$this->log(" order in generate_payment_request ==>  " . print_r($order, true) . PHP_EOL);
-		$this->log(" source in generate_payment_request ==>  " . print_r($source, true) . PHP_EOL);
 
 		$post_data                = array();
 		$post_data['amount']      = $this->get_xendit_amount( $order->get_total(), $post_data['currency'] );
-		$post_data['token_id']    = wc_clean( $_POST['xendit_token'] );
-		$post_data['authentication_id']  = wc_clean( $_POST['xendit_authentication'] );
+		$post_data['token_id']    = wc_clean( $_POST['xendit_token'] ? $_POST['xendit_token'] : $_POST['wc-xendit-payment-token'] );
+		$post_data['authentication_id']  = wc_clean( $_POST['xendit_authentication'] ? $_POST['xendit_authentication'] : $_POST['wc-xendit-payment-token']);
 		$post_data['external_id'] = $this->generate_external_id();
-
-		return $post_data;
-	}
-
-	/**
-	 * Generate the request for a subscription.
-	 * @param  WC_Order $order
-	 * @param  object $source
-	 * @return array()
-	 */
-	protected function generate_subscription_request( $order, $source ) {
-
-		$this->log(" order in generate_subscription_request ==>  " . print_r($order, true) . PHP_EOL);
-		$this->log(" source in generate_subscription_request ==>  " . print_r($source, true) . PHP_EOL);
-
-		$post_data                = array();
-		$post_data['amount']      = $this->get_xendit_amount( $order->get_total(), $post_data['currency'] );
-		$post_data['token_id']    = wc_clean( $_POST['xendit_token'] );
-		$post_data['frequency'] = WC_Subscriptions_Order::get_subscription_interval( $order );
-		$post_data['start_date'] = '2017-10-15T10:00:00.000Z';
-		$post_data['end_date'] = '2018-10-15T10:00:00.000Z';
 
 		return $post_data;
 	}
@@ -404,14 +382,13 @@ class WC_Gateway_Xendit extends WC_Payment_Gateway_CC {
 	 * @return object
 	 */
 	 protected function get_source( $order ) {
- 		$this->log('get_source called in Xendit with order => ' . print_r($order, true) . 'and ');
-		$this->log('wc-xendit-payment-token -> ' . print_r($_POST['wc-xendit-payment-token']));
+ 		$this->log('get_source called in Xendit with order => ' . print_r($order, true) . PHP_EOL);
+		$this->log('wc-xendit-payment-token -> ' . print_r($_POST['wc-xendit-payment-token']) . PHP_EOL);
  		$xendit_source   = false;
  		$token_id        = false;
 
  		// New CC info was entered and we have a new token to process
  		if ( isset( $_POST['xendit_token'] ) ) {
-
  			$this->log(print_r($_POST['xendit_token'], true));
 
  			$xendit_token     = wc_clean( $_POST['xendit_token'] );
@@ -419,7 +396,7 @@ class WC_Gateway_Xendit extends WC_Payment_Gateway_CC {
 			$xendit_source   = $xendit_token;
  		} elseif ( isset( $_POST['wc-xendit-payment-token'] ) && 'new' !== $_POST['wc-xendit-payment-token'] ) {
 			// Use an EXISTING multiple use token, and then process the payment
-
+			$this->log('getting WC_Payment_Tokens');
 			$token_id = wc_clean( $_POST['wc-xendit-payment-token'] );
 			$token    = WC_Payment_Tokens::get( $token_id );
 
@@ -437,6 +414,37 @@ class WC_Gateway_Xendit extends WC_Payment_Gateway_CC {
  			'source'   => $xendit_source,
  		);
  	}
+
+	/**
+	 * Get payment source from an order. This could be used in the future for
+	 * a subscription as an example, therefore using the current user ID would
+	 * not work - the customer won't be logged in :)
+	 *
+	 * Not using 2.6 tokens for this part since we need a customer AND a card
+	 * token, and not just one.
+	 *
+	 * @param object $order
+	 * @return object
+	 */
+	protected function get_order_source( $order = null ) {
+		$this->log('get_order source called in Class_WC_Gateway_Xendit' . PHP_EOL);
+
+		$xendit_source   = false;
+		$token_id        = false;
+
+		if ( $order ) {
+			$order_id = version_compare( WC_VERSION, '3.0.0', '<' ) ? $order->id : $order->get_id();
+
+			if ( $meta_value = get_post_meta( $order_id, '_xendit_card_id', true ) ) {
+				$xendit_source = $meta_value;
+			}
+		}
+
+		return (object) array(
+			'token_id' => $token_id,
+			'source'   => $xendit_source,
+		);
+	}
 
 	/**
 	 * Process the payment
@@ -484,7 +492,7 @@ class WC_Gateway_Xendit extends WC_Payment_Gateway_CC {
 				$this->log( "Info: Begin processing payment for order $order_id for the amount of {$order->get_total()}" );
 
 				// Make the request.
-				$response = WC_Xendit_API::request( $this->generate_payment_request( $order, $source ) );
+				$response = WC_Xendit_API::request( $this->generate_payment_request( $order ) );
 
 				// $subscription = WC_Xendit_API::request( $this->generate_subscription_request( $order, $source ), 'managed_subscriptions' );
 
@@ -523,7 +531,6 @@ class WC_Gateway_Xendit extends WC_Payment_Gateway_CC {
 			do_action( 'wc_gateway_xendit_process_payment', $response, $order );
 
 			// Return thank you page redirect.
-			die();
 			return array(
 				'result'   => 'success',
 				'redirect' => $this->get_return_url( $order )
@@ -553,14 +560,11 @@ class WC_Gateway_Xendit extends WC_Payment_Gateway_CC {
 	 * @param stdClass $source Source information.
 	 */
 	protected function save_source( $order, $source ) {
-		$this->log('save_source called in Xendit mofo with order ==> ' . print_r($order, true) . 'and source ==> ' . print_r($source, true));
+		$this->log('save_source called in Xendit with order ==> ' . print_r($order, true) . 'and source ==> ' . print_r($source, true));
 
 		$order_id = version_compare( WC_VERSION, '3.0.0', '<' ) ? $order->id : $order->get_id();
 
 		// Store source in the order.
-		if ( $source->subscription ) {
-			version_compare( WC_VERSION, '3.0.0', '<' ) ? update_post_meta( $order_id, '_xendit_subscription_id', $source->subscription ) : $order->update_meta_data( '_xendit_subscription_id', $source->subscription );
-		}
 		if ( $source->source ) {
 			version_compare( WC_VERSION, '3.0.0', '<' ) ? update_post_meta( $order_id, '_xendit_card_id', $source->source ) : $order->update_meta_data( '_xendit_card_id', $source->source );
 		}
@@ -574,8 +578,8 @@ class WC_Gateway_Xendit extends WC_Payment_Gateway_CC {
 	 * Store extra meta data for an order from a Xendit Response.
 	 */
 	 public function process_response( $response, $order ) {
- 		$this->log( 'Processing response: ' . print_r( $response, true ) );
-		$this->log( 'CAPTURED => ' . print_r( $response->status == 'CAPTURED' ));
+ 		$this->log( 'Processing response: ' . print_r( $response, true ) . PHP_EOL);
+		$this->log( 'CAPTURED => ' . print_r( $response->status == 'CAPTURED' ) . PHP_EOL);
 
  		$order_id = version_compare( WC_VERSION, '3.0.0', '<' ) ? $order->id : $order->get_id();
 
@@ -621,36 +625,36 @@ class WC_Gateway_Xendit extends WC_Payment_Gateway_CC {
 	 * We don't store the token locally, but to the Xendit API.
 	 * @since 3.0.0
 	 */
-	public function add_payment_method() {
-		console_log('add_payment_method called in Xendit');
-		if ( empty( $_POST['xendit_token'] ) || ! is_user_logged_in() ) {
-			wc_add_notice( __( 'There was a problem adding the card.', 'xendit-woocommerce-gateway' ), 'error' );
-			return;
-		}
-
-		$xendit_subscription = new WC_Xendit_Customer( get_current_user_id() );
-		$card            = $xendit_subscription->add_card( wc_clean( $_POST['xendit_token'] ) );
-
-		if ( is_wp_error( $card ) ) {
-			$localized_messages = $this->get_localized_messages();
-			$error_msg = __( 'There was a problem adding the card.', 'xendit-woocommerce-gateway' );
-
-			// loop through the errors to find matching localized message
-			foreach ( $card->errors as $error => $msg ) {
-				if ( isset( $localized_messages[ $error ] ) ) {
-					$error_msg = $localized_messages[ $error ];
-				}
-			}
-
-			wc_add_notice( $error_msg, 'error' );
-			return;
-		}
-
-		return array(
-			'result'   => 'success',
-			'redirect' => wc_get_endpoint_url( 'payment-methods' ),
-		);
-	}
+	// public function add_payment_method() {
+	// 	$this->log('add_payment_method called in Xendit');
+	// 	if ( empty( $_POST['xendit_token'] ) || ! is_user_logged_in() ) {
+	// 		wc_add_notice( __( 'There was a problem adding the card.', 'xendit-woocommerce-gateway' ), 'error' );
+	// 		return;
+	// 	}
+	//
+	// 	$xendit_subscription = new WC_Xendit_Customer( get_current_user_id() );
+	// 	$card            = $xendit_subscription->add_card( wc_clean( $_POST['xendit_token'] ) );
+	//
+	// 	if ( is_wp_error( $card ) ) {
+	// 		$localized_messages = $this->get_localized_messages();
+	// 		$error_msg = __( 'There was a problem adding the card.', 'xendit-woocommerce-gateway' );
+	//
+	// 		// loop through the errors to find matching localized message
+	// 		foreach ( $card->errors as $error => $msg ) {
+	// 			if ( isset( $localized_messages[ $error ] ) ) {
+	// 				$error_msg = $localized_messages[ $error ];
+	// 			}
+	// 		}
+	//
+	// 		wc_add_notice( $error_msg, 'error' );
+	// 		return;
+	// 	}
+	//
+	// 	return array(
+	// 		'result'   => 'success',
+	// 		'redirect' => wc_get_endpoint_url( 'payment-methods' ),
+	// 	);
+	// }
 
 	/**
 	 * Refund a charge

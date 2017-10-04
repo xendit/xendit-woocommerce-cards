@@ -97,10 +97,10 @@ class WC_Gateway_Xendit_Addons extends WC_Gateway_Xendit {
 		}
 
 		foreach ( $subscriptions as $subscription ) {
-			$this->log('first subscription -> ' . print_r($subscription, true));
+			$this->log('first subscription.getID() -> ' . print_r($subscription->get_id(), true));
 
 			$subscription_id = $this->wc_pre_30 ? $subscription->id : $subscription->get_id();
-			update_post_meta( $subscription_id, '_xendit_customer_id', $source->customer );
+			update_post_meta( $subscription_id, '_xendit_subscription_id', $source->customer );
 			update_post_meta( $subscription_id, '_xendit_card_id', $source->source );
 		}
 	}
@@ -113,29 +113,31 @@ class WC_Gateway_Xendit_Addons extends WC_Gateway_Xendit {
 	 * @param  bool initial_payment
 	 */
 	public function process_subscription_payment( $order = '', $amount = 0 ) {
+		$this->log('process_subscription_payment called in Xendit addons');
+
 		if ( $amount * 100 < WC_Xendit::get_minimum_amount() ) {
 			return new WP_Error( 'xendit_error', sprintf( __( 'Sorry, the minimum allowed order total is %1$s to use this payment method.', 'woocommerce-gateway-xendit' ), wc_price( WC_Xendit::get_minimum_amount() / 100 ) ) );
 		}
 
 		// Get source from order
 		$source = $this->get_order_source( $order );
+		$this->log('process_subscription_payment -> get_order_source -> ' . print_r($source, true));
 
 		// If no order source was defined, use user source instead.
-		if ( ! $source->customer ) {
+		if ( ! $source->source ) {
 			$source = $this->get_source( ( $this->wc_pre_30 ? $order->customer_user : $order->get_customer_id() ) );
 		}
 
 		// Or fail :(
-		if ( ! $source->customer ) {
+		if ( ! $source->source ) {
 			return new WP_Error( 'xendit_error', __( 'Customer not found', 'woocommerce-gateway-xendit' ) );
 		}
 
 		$order_id = $this->wc_pre_30 ? $order->id : $order->get_id();
-		$this->log('process_subscription_payment called in Xendit addons');
 		$this->log( "Info: Begin processing subscription payment for order {$order_id} for the amount of {$amount}" );
 
 		// Make the request
-		$request             = $this->generate_subscription_request( $order );
+		$request             = $this->generate_payment_request( $order );
 
 		$this->log('subscrip request is -> ' . print_r($request, true));
 
@@ -222,7 +224,7 @@ class WC_Gateway_Xendit_Addons extends WC_Gateway_Xendit {
 
 			while ( 1 ) {
 				$source   = $this->get_order_source( $order );
-				$response = WC_Xendit_API::request( $this->generate_payment_request( $order, $source ) );
+				$response = WC_Xendit_API::request( $this->generate_payment_request( $order ) );
 
 				if ( is_wp_error( $response ) ) {
 					if ( 0 === sizeof( $retry_callbacks ) ) {
@@ -278,6 +280,7 @@ class WC_Gateway_Xendit_Addons extends WC_Gateway_Xendit {
 	 * @param $renewal_order WC_Order A WC_Order object created to record the renewal payment.
 	 */
 	public function scheduled_subscription_payment( $amount_to_charge, $renewal_order ) {
+		$this->log('called scheduled_subscription_payment in XENDIT ADDONS');
 		$response = $this->process_subscription_payment( $renewal_order, $amount_to_charge );
 
 		if ( is_wp_error( $response ) ) {
