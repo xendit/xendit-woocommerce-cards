@@ -1,159 +1,112 @@
-<?php
-if ( ! defined( 'ABSPATH' ) ) {
-	exit;
-}
+switch( $transaction_details['txn_type'] ) {
+    case 'subscr_signup':
 
-/**
- * WC_Xendit_Subscription class.
- *
- * Represents a Xendit Subscription.
- */
-class WC_Xendit_Subscription {
+        // Store PayPal Details
+        update_post_meta( $order_id, 'Payer PayPal address', $transaction_details['payer_email']);
+        update_post_meta( $order_id, 'Payer PayPal first name', $transaction_details['first_name']);
+        update_post_meta( $order_id, 'Payer PayPal last name', $transaction_details['last_name']);
+        update_post_meta( $order_id, 'PayPal Subscriber ID', $transaction_details['subscr_id']);
 
-	/**
-	 * Xendit subscription ID
-	 * @var string
-	 */
-	private $id = '';
+        // Payment completed
+        $order->add_order_note( __( 'IPN subscription sign up completed.', WC_Subscriptions::$text_domain ) );
 
-	/**
-	 * WP User ID
-	 * @var integer
-	 */
-	private $user_id = 0;
+        if ( self::$debug )
+            self::$log->add( 'paypal', 'IPN subscription sign up completed for order ' . $order_id );
 
-	/**
-	 * Data from API
-	 * @var array
-	 */
-	private $subscription_data = array();
+        break;
 
-	/**
-	 * Constructor
-	 * @param integer $user_id
-	 */
-	public function __construct($args) {
-        if ($args) {
-            $this->set_id($this->create_subscription($args));
+    case 'subscr_payment':
+
+        if ( 'completed' == strtolower( $transaction_details['payment_status'] ) ) {
+            // Store PayPal Details
+            update_post_meta( $order_id, 'PayPal Transaction ID', $transaction_details['txn_id'] );
+            update_post_meta( $order_id, 'Payer PayPal first name', $transaction_details['first_name'] );
+            update_post_meta( $order_id, 'Payer PayPal last name', $transaction_details['last_name'] );
+            update_post_meta( $order_id, 'PayPal Payment type', $transaction_details['payment_type'] );
+
+            // Subscription Payment completed
+            $order->add_order_note( __( 'IPN subscription payment completed.', WC_Subscriptions::$text_domain ) );
+
+            if ( self::$debug )
+                self::$log->add( 'paypal', 'IPN subscription payment completed for order ' . $order_id );
+
+            $subscriptions_in_order = WC_Subscriptions_Order::get_recurring_items( $order );
+            $subscription_item      = array_pop( $subscriptions_in_order );
+            $subscription_key       = WC_Subscriptions_Manager::get_subscription_key( $order->id, $subscription_item['id'] );
+            $subscription           = WC_Subscriptions_Manager::get_subscription( $subscription_key, $order->customer_user );
+
+            // First payment on order, process payment & activate subscription
+            if ( empty( $subscription['completed_payments'] ) ) {
+
+                $order->payment_complete();
+
+                WC_Subscriptions_Manager::activate_subscriptions_for_order( $order );
+
+            } else {
+
+                WC_Subscriptions_Manager::process_subscription_payments_on_order( $order );
+
+            }
+
+        } elseif ( 'failed' == strtolower( $transaction_details['payment_status'] ) ) {
+
+            // Subscription Payment completed
+            $order->add_order_note( __( 'IPN subscription payment failed.', WC_Subscriptions::$text_domain ) );
+
+            if ( self::$debug )
+                self::$log->add( 'paypal', 'IPN subscription payment failed for order ' . $order_id );
+
+            WC_Subscriptions_Manager::process_subscription_payment_failure_on_order( $order );
+
+        } else {
+
+            if ( self::$debug )
+                self::$log->add( 'paypal', 'IPN subscription payment notification received for order ' . $order_id  . ' with status ' . $transaction_details['payment_status'] );
+
         }
-	}
 
-	/**
-	 * Get Xendit subscription ID.
-	 * @return string
-	 */
-	public function get_id() {
-		return $this->id;
-	}
+        break;
 
-	/**
-	 * Set Xendit subscription ID.
-	 * @param [type] $id [description]
-	 */
-	public function set_id( $id ) {
-		$this->id = wc_clean( $id );
-	}
+    case 'subscr_cancel':
 
-	/**
-	 * User ID in WordPress.
-	 * @return int
-	 */
-	public function get_user_id() {
-		return absint( $this->user_id );
-	}
+        if ( self::$debug )
+            self::$log->add( 'paypal', 'IPN subscription cancelled for order ' . $order_id );
 
-	/**
-	 * Set User ID used by WordPress.
-	 * @param int $user_id
-	 */
-	public function set_user_id( $user_id ) {
-		$this->user_id = absint( $user_id );
-	}
+        // Subscription Payment completed
+        $order->add_order_note( __( 'IPN subscription cancelled for order.', WC_Subscriptions::$text_domain ) );
 
-	/**
-	 * Get user object.
-	 * @return WP_User
-	 */
-	protected function get_user() {
-		return $this->get_user_id() ? get_user_by( 'id', $this->get_user_id() ) : false;
-	}
+        WC_Subscriptions_Manager::cancel_subscriptions_for_order( $order );
 
-	/**
-	 * Store data from the Xendit API about this subscription
-	 */
-	public function set_subscription_data( $data ) {
-		$this->subscription_data = $data;
-	}
+        break;
 
-	/**
-	 * Get data from the Xendit API about this subscription
-	 */
-	public function get_subscription_data() {
-		if ( empty( $this->subscription_data ) && $this->get_id() && false === ( $this->subscription_data = get_transient( 'xendit_subscription_' . $this->get_id() ) ) ) {
-			$response = WC_Xendit_API::request( array(), 'managed_subscriptions/' . $this->get_id() );
+    case 'subscr_eot': // Subscription ended, either due to failed payments or expiration
 
-			if ( ! is_wp_error( $response ) ) {
-				$this->set_subscription_data( $response );
-				set_transient( 'xendit_subscription_' . $this->get_id(), $response, HOUR_IN_SECONDS * 48 );
-			}
-		}
-		return $this->subscription_data;
-	}
+        // PayPal fires the 'subscr_eot' notice immediately if a subscription is only for one billing period, so ignore the request when we only have one billing period
+        if ( 1 != WC_Subscriptions_Order::get_subscription_length( $order ) ) {
 
-	/**
-	 * Create a subscription via API.
-	 * @param array $args
-	 * @return WP_Error|int
-	 */
-	public function create_subscription( $args = array() ) {
-		if ( $user = $this->get_user() ) {
-			$billing_first_name = get_user_meta( $user->ID, 'billing_first_name', true );
-			$billing_last_name  = get_user_meta( $user->ID, 'billing_last_name', true );
+            if ( self::$debug )
+                self::$log->add( 'paypal', 'IPN subscription end-of-term for order ' . $order_id );
 
-			$defaults = array(
-				'email'       => $user->user_email,
-				'description' => $billing_first_name . ' ' . $billing_last_name,
-			);
-		} else {
-			$defaults = array(
-				'email'       => '',
-				'description' => '',
-			);
-		}
+            // Record subscription ended
+            $order->add_order_note( __( 'IPN subscription end-of-term for order.', WC_Subscriptions::$text_domain ) );
 
-		$metadata = array();
+            // Ended due to failed payments so cancel the subscription
+            if ( time() < strtotime( WC_Subscriptions_Manager::get_subscription_expiration_date( WC_Subscriptions_Manager::get_subscription_key( $order->id ), $order->customer_user ) ) )
+                WC_Subscriptions_Manager::cancel_subscriptions_for_order( $order );
+            else
+                WC_Subscriptions_Manager::expire_subscriptions_for_order( $order );
+        }
+        break;
 
-		$defaults['metadata'] = apply_filters( 'wc_xendit_subscription_metadata', $metadata, $user );
+    case 'subscr_failed': // Subscription sign up failed
 
-		$args     = wp_parse_args( $args, $defaults );
+        if ( self::$debug )
+            self::$log->add( 'paypal', 'IPN subscription sign up failure for order ' . $order_id );
 
-		$response = WC_Xendit_API::request( $args, 'managed_subscriptions' );
+        // Subscription Payment completed
+        $order->add_order_note( __( 'IPN subscription sign up failure.', WC_Subscriptions::$text_domain ) );
 
-		if ( is_wp_error( $response ) ) {
-			return $response;
-		} elseif ( empty( $response->id ) ) {
-			return new WP_Error( 'xendit_error', __( 'Could not create Xendit subscription.', 'woocommerce-gateway-xendit' ) );
-		}
+        WC_Subscriptions_Manager::failed_subscription_sign_ups_for_order( $order );
 
-		$this->set_id( $response->id );
-		$this->clear_cache();
-		$this->set_subscription_data( $response );
-
-		if ( $this->get_user_id() ) {
-			update_user_meta( $this->get_user_id(), '_xendit_subscription_id', $response->id );
-		}
-
-		do_action( 'woocommerce_xendit_add_subscription', $args, $response );
-
-		return $response->id;
-	}
-
-
-	/**
-	 * Deletes caches for this users cards.
-	 */
-	public function clear_cache() {
-		delete_transient( 'xendit_subscription_' . $this->get_id() );
-		$this->subscription_data = array();
-	}
+        break;
 }

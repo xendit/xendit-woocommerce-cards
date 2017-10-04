@@ -317,6 +317,7 @@ class WC_Gateway_Xendit extends WC_Payment_Gateway_CC {
  		);
 
  		// If we're on the pay page we need to pass xendit.js the address of the order.
+		// TODO: implement direct payments from the order
  		if ( isset( $_GET['pay_for_order'] ) && 'true' === $_GET['pay_for_order'] ) {
  			$order_id = wc_get_order_id_by_order_key( urldecode( $_GET['key'] ) );
  			$order    = wc_get_order( $order_id );
@@ -340,6 +341,7 @@ class WC_Gateway_Xendit extends WC_Payment_Gateway_CC {
  		wp_localize_script( 'woocommerce_xendit', 'wc_xendit_params', apply_filters( 'wc_xendit_params', $xendit_params ) );
  	}
 
+	//TODO: make length randomish
 	function generate_external_id($length = 64) {
 	    $characters = '0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ';
 	    $charactersLength = strlen($characters);
@@ -385,7 +387,7 @@ class WC_Gateway_Xendit extends WC_Payment_Gateway_CC {
 		$post_data                = array();
 		$post_data['amount']      = $this->get_xendit_amount( $order->get_total(), $post_data['currency'] );
 		$post_data['token_id']    = wc_clean( $_POST['xendit_token'] );
-		$post_data['frequency'] = 'MONTHLY';
+		$post_data['frequency'] = WC_Subscriptions_Order::get_subscription_interval( $order );
 		$post_data['start_date'] = '2017-10-15T10:00:00.000Z';
 		$post_data['end_date'] = '2018-10-15T10:00:00.000Z';
 
@@ -393,7 +395,7 @@ class WC_Gateway_Xendit extends WC_Payment_Gateway_CC {
 	}
 
 	/**
-	 * Get payment source. This can be a new token or existing card.
+	 * Get payment source. This can be a new token or existing token.
 	 *
 	 * @param string $subscription_id
 	 * @param bool  $force_subscription Should we force subscription creation.
@@ -401,9 +403,9 @@ class WC_Gateway_Xendit extends WC_Payment_Gateway_CC {
 	 * @throws Exception When card was not added or for and invalid card.
 	 * @return object
 	 */
-	 protected function get_source( $user_id, $force_customer = false ) {
- 		$this->log('get_source called in Xendit with user id => ' . print_r($user_id, true) . 'and ');
-
+	 protected function get_source( $order ) {
+ 		$this->log('get_source called in Xendit with order => ' . print_r($order, true) . 'and ');
+		$this->log('wc-xendit-payment-token -> ' . print_r($_POST['wc-xendit-payment-token']));
  		$xendit_source   = false;
  		$token_id        = false;
 
@@ -415,64 +417,38 @@ class WC_Gateway_Xendit extends WC_Payment_Gateway_CC {
  			$xendit_token     = wc_clean( $_POST['xendit_token'] );
  			// Not saving token, so don't define customer either.
 			$xendit_source   = $xendit_token;
-			$xendit_customer = false;
+ 		} elseif ( isset( $_POST['wc-xendit-payment-token'] ) && 'new' !== $_POST['wc-xendit-payment-token'] ) {
+			// Use an EXISTING multiple use token, and then process the payment
 
- 		}
+			$token_id = wc_clean( $_POST['wc-xendit-payment-token'] );
+			$token    = WC_Payment_Tokens::get( $token_id );
+
+							// associates payment token with WP user_id
+			if ( ! $token || $token->get_user_id() !== get_current_user_id() ) {
+				WC()->session->set( 'refresh_totals', true );
+				throw new Exception( __( 'Invalid payment method. Please input a new card number.', 'woocommerce-gateway-xendit' ) );
+			}
+
+			$xendit_source = $token->get_token();
+		}
 
  		return (object) array(
  			'token_id' => $token_id,
- 			'customer' => false,
  			'source'   => $xendit_source,
  		);
  	}
-
-	/**
-	 * Get payment source from an order. This could be used in the future for
-	 * a subscription as an example, therefore using the current user ID would
-	 * not work - the subscription won't be logged in :)
-	 *
-	 *
-	 * @param object $order
-	 * @return object
-	 */
-	protected function get_order_source( $order = null ) {
-		$this->log('get_order_source called in Xendit with order ==> ' . print_r($order, true) . PHP_EOL);
-
-		$xendit_subscription = new WC_Xendit_Subscription($order);
-		// $xendit_source   = false;
-		// $token_id        = false;
-		//
-		// if ( $order ) {
-		// 	$order_id = $order->get_id();
-		//
-		// 	if ( $meta_value = get_post_meta( $order_id, '_xendit_subscription_id', true ) ) {
-		// 		$xendit_subscription->set_id( $meta_value );
-		// 	}
-		//
-		// 	if ( $meta_value = get_post_meta( $order_id, '_xendit_card_id', true ) ) {
-		// 		$xendit_source = $meta_value;
-		// 	}
-		// }
-		//
-		return (object) array(
-			'token_id' => $token_id,
-			'subscription_id' => $xendit_subscription ? $xendit_subscription->get_id() : false,
-			'source'   => $xendit_source,
-		);
-	}
 
 	/**
 	 * Process the payment
 	 *
 	 * @param int  $order_id Reference.
 	 * @param bool $retry Should we retry on fail.
-	 * @param bool $force_subscription Force user creation.
 	 *
 	 * @throws Exception If payment will not be accepted.
 	 *
 	 * @return array|void
 	 */
-	public function process_payment( $order_id, $retry = true, $force_subscription = false ) {
+	public function process_payment( $order_id, $retry = true ) {
 		$this->log('process_payment called in Xendit with order_id ==> ' . print_r($order_id, true) . PHP_EOL);
 
 		try {
@@ -480,11 +456,10 @@ class WC_Gateway_Xendit extends WC_Payment_Gateway_CC {
 
 			$this->log('order is => ' . print_r($order, true) . PHP_EOL);
 
-			// currently the issue is source is empty here.
-			$source = $this->get_source($order, $force_subscription);
+			//token
+			$source = $this->get_source($order);
 
 			$this->log('process_payment try block with source ==> ' . print_r($source, true) . 'and order id ==> ' . $order_id . PHP_EOL);
-
 
 			// so it enters the if block and throws an error.
 			if ( empty( $source->source ) && empty( $source->subscription ) ) {
@@ -513,28 +488,28 @@ class WC_Gateway_Xendit extends WC_Payment_Gateway_CC {
 
 				// $subscription = WC_Xendit_API::request( $this->generate_subscription_request( $order, $source ), 'managed_subscriptions' );
 
-				// if ( is_wp_error( $response ) ) {
-				// 	// Customer param wrong? The user may have been deleted on xendit's end. Remove subscription_id. Can be retried without.
-				// 	if ( 'subscription' === $response->get_error_code() && $retry ) {
-				// 		delete_user_meta( get_current_user_id(), '_xendit_subscription_id' );
-				// 		return $this->process_payment( $order_id, false, $force_subscription );
-				// 		// Source param wrong? The CARD may have been deleted on xendit's end. Remove token and show message.
-				// 	} elseif ( 'source' === $response->get_error_code() && $source->token_id ) {
-				// 		$token = WC_Payment_Tokens::get( $source->token_id );
-				// 		$token->delete();
-				// 		$message = __( 'This card is no longer available and has been removed.', 'xendit-woocommerce-gateway' );
-				// 		$order->add_order_note( $message );
-				// 		throw new Exception( $message );
-				// 	}
-				//
-				// 	$localized_messages = $this->get_localized_messages();
-				//
-				// 	$message = isset( $localized_messages[ $response->get_error_code() ] ) ? $localized_messages[ $response->get_error_code() ] : $response->get_error_message();
-				//
-				// 	$order->add_order_note( $message );
-				//
-				// 	throw new Exception( $message );
-				// }
+				if ( is_wp_error( $response ) ) {
+					// Customer param wrong? The user may have been deleted on xendit's end. Remove subscription_id. Can be retried without.
+					if ( 'subscription' === $response->get_error_code() && $retry ) {
+						delete_user_meta( get_current_user_id(), '_xendit_subscription_id' );
+						return $this->process_payment( $order_id, false );
+						// Source param wrong? The CARD may have been deleted on xendit's end. Remove token and show message.
+					} elseif ( 'source' === $response->get_error_code() && $source->token_id ) {
+						$token = WC_Payment_Tokens::get( $source->token_id );
+						$token->delete();
+						$message = __( 'This card is no longer available and has been removed.', 'xendit-woocommerce-gateway' );
+						$order->add_order_note( $message );
+						throw new Exception( $message );
+					}
+
+					$localized_messages = $this->get_localized_messages();
+
+					$message = isset( $localized_messages[ $response->get_error_code() ] ) ? $localized_messages[ $response->get_error_code() ] : $response->get_error_message();
+
+					$order->add_order_note( $message );
+
+					throw new Exception( $message );
+				}
 
 				// Process valid response.
 				$this->process_response( $response, $order );
@@ -548,9 +523,10 @@ class WC_Gateway_Xendit extends WC_Payment_Gateway_CC {
 			do_action( 'wc_gateway_xendit_process_payment', $response, $order );
 
 			// Return thank you page redirect.
+			die();
 			return array(
 				'result'   => 'success',
-				'redirect' => $this->get_return_url( $order ),
+				'redirect' => $this->get_return_url( $order )
 			);
 
 		} catch ( Exception $e ) {
@@ -599,12 +575,13 @@ class WC_Gateway_Xendit extends WC_Payment_Gateway_CC {
 	 */
 	 public function process_response( $response, $order ) {
  		$this->log( 'Processing response: ' . print_r( $response, true ) );
+		$this->log( 'CAPTURED => ' . print_r( $response->status == 'CAPTURED' ));
 
  		$order_id = version_compare( WC_VERSION, '3.0.0', '<' ) ? $order->id : $order->get_id();
 
  		// Store charge data
  		update_post_meta( $order_id, '_xendit_charge_id', $response->id );
- 		update_post_meta( $order_id, '_xendit_charge_captured', $response->captured ? 'yes' : 'no' );
+ 		update_post_meta( $order_id, '_xendit_charge_captured', $response->status == 'CAPTURED'  ? 'yes' : 'no' );
 
  		// Store other data such as fees
  		if ( isset( $response->balance_transaction ) && isset( $response->balance_transaction->fee ) ) {
@@ -616,7 +593,7 @@ class WC_Gateway_Xendit extends WC_Payment_Gateway_CC {
  			update_post_meta( $order_id, 'Net Revenue From Xendit', $net );
  		}
 
- 		if ( $response->captured ) {
+ 		if ( $response->status == 'CAPTURED') {
  			$order->payment_complete( $response->id );
 
  			$message = sprintf( __( 'Xendit charge complete (Charge ID: %s)', 'woocommerce-gateway-xendit' ), $response->id );
