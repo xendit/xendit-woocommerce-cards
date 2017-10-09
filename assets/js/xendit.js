@@ -1,6 +1,6 @@
 /* global wc_xendit_params */
 Xendit.setPublishableKey( wc_xendit_params.key );
-console.log('PUBLISHABLE KEY, BITCH => ', Xendit._getPublishableKey());
+
 jQuery( function( $ ) {
 	'use strict';
 
@@ -59,7 +59,27 @@ jQuery( function( $ ) {
 				.on(
 					'checkout_error',
 					this.clearToken
-				);
+				)
+				.ready(function () {
+					$('.woocommerce').append('<div class="overlay" style="display: none;"></div>' +
+		            	'<div id="three-ds-container" style="display: none;">' +
+		                	'<iframe height="450" width="550" id="sample-inline-frame" name="sample-inline-frame"> </iframe>' +
+		            	'</div>');
+
+					$('.woocommerce').append(
+						'<div id="error" style="display: none;">' +
+							'<pre>' +
+				                '<p>Whoops! There was an error while processing your request. </p>' +
+								'<p>Please check your credit card details and try again. <br/> <a href="https://www.xendit.co/en/contact/" >Contact Xendit Support</a> if the problem persists. </p>' +
+								'<p class="result"></p>' +
+							'</pre>' +
+			            '</div>' );
+
+
+					$('.overlay').css({'position': 'absolute','top': '0','left': '0','height': '100%','width': '100%','background-color': 'rgba(0,0,0,0.5)','z-index': '10'});
+					$('#three-ds-container').css({'width': '550px','height': '450px','line-height': '200px','position': 'fixed','top': '25%','left': '40%','margin-top': '-100px','margin-left': '-150px','background-color': '#ffffff','border-radius': '5px','text-align': 'center','z-index': '1000'});
+					$('#error').css({color: 'red', 'width': '100%'});
+				});
 		},
 
 		isXenditChosen: function() {
@@ -84,32 +104,18 @@ jQuery( function( $ ) {
 			wc_xendit_form.form.unblock();
 		},
 
-		onError: function( e, responseObject ) {
-			var message = responseObject.response.error.message;
-
-			// Customers do not need to know the specifics of the below type of errors
-			// therefore return a generic localizable error message.
-			if (
-				'invalid_request_error' === responseObject.response.error.type ||
-				'api_connection_error'  === responseObject.response.error.type ||
-				'api_error'             === responseObject.response.error.type ||
-				'authentication_error'  === responseObject.response.error.type ||
-				'rate_limit_error'      === responseObject.response.error.type
-			) {
-				message = wc_xendit_params.invalid_request_error;
-			}
-
-			if ( 'card_error' === responseObject.response.error.type && wc_xendit_params.hasOwnProperty( responseObject.response.error.code ) ) {
-				message = wc_xendit_params[ responseObject.response.error.code ];
-			}
-
-			$( '.wc-xendit-error, .xendit_token' ).remove();
-			$( '#xendit-card-number' ).closest( 'p' ).before( '<ul class="woocommerce_error woocommerce-error wc-xendit-error"><li>' + message + '</li></ul>' );
+		onError: function( e, response ) {
+			console.log(response);
+			//TODO: do something here (pop up authentication fail)
+			$('#three-ds-container').hide();
+			$('.overlay').hide();
+			$('#error .result').text('Failure Reason: ' + JSON.stringify(response.failure_reason || response.err.message, null, 4));
+			$('#error').show();
 			wc_xendit_form.unblock();
 		},
 
 		onSubmit: function( e ) {
-			console.log('ON SUBMIT BITCH');
+
 			if ( wc_xendit_form.isXenditChosen() && ! wc_xendit_form.hasToken()) {
 				e.preventDefault();
 				wc_xendit_form.block();
@@ -128,6 +134,9 @@ jQuery( function( $ ) {
 						"is_multiple_use": true
 					};
 
+				wc_xendit_form.form.append( "<input type='hidden' class='year' name='year' value='" + data.card_exp_year + "'/>" );
+				wc_xendit_form.form.append( "<input type='hidden' class='month' name='month' value='" + data.card_exp_month + "'/>" );
+
 				Xendit.card.createToken( data, wc_xendit_form.createAuthentication );
 				// Prevent form submitting
 				return false;
@@ -141,8 +150,6 @@ jQuery( function( $ ) {
 		createAuthentication: function(err, response) {
 			var token_id = response.id;
 
-			console.log("token => ", token_id);
-
 			var data = {
 				"amount": total,
 				"token_id": token_id
@@ -153,18 +160,22 @@ jQuery( function( $ ) {
 		},
 
 		onAuthenticationResponse: function( err, response ) {
-
 			if (err) {
 					$( document ).trigger( 'xenditError', { err: err } );
 			}
-
-			console.log("authentication => ", response);
 			// token contains id, last4, and card type
 			var authentication_id = response.id;
 
-			// insert the token into the form so it gets submitted to the server
-			wc_xendit_form.form.append( "<input type='hidden' class='xendit_authentication' name='xendit_authentication' value='" + authentication_id + "'/>" );
-			wc_xendit_form.form.submit();
+			if (response.status === 'APPROVED' || response.status === 'VERIFIED') {
+				wc_xendit_form.form.append( "<input type='hidden' class='xendit_authentication' name='xendit_authentication' value='" + authentication_id + "'/>" );
+				wc_xendit_form.form.submit();
+			} else if (response.status === 'IN_REVIEW') {
+				window.open(response.payer_authentication_url, 'sample-inline-frame');
+				$('.overlay').show();
+				$('#three-ds-container').show();
+			} else {
+				wc_xendit_form.onError(response);
+			}
 		},
 
 		clearToken: function() {
