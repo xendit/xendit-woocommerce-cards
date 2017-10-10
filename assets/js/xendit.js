@@ -94,8 +94,8 @@ jQuery( function( $ ) {
 			wc_xendit_form.form.block({
 				message: null,
 				overlayCSS: {
-					background: '#fff',
-					opacity: 0.6
+					background: '#000',
+					opacity: 0.5
 				}
 			});
 		},

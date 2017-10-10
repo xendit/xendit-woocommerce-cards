@@ -132,7 +132,7 @@ class WC_Gateway_Xendit extends WC_Payment_Gateway_CC {
 		}
 
 		if ( $this->testmode ) {
-			$this->description .= ' ' . sprintf( __( 'TEST MODE ENABLED. In test mode, you can use the card number 5200000000000056 with any CVC and a valid expiration date or check the documentation "<a href="%s">Testing Xendit</a>" for more card numbers.', 'woocommerce-gateway-xendit' ), 'https://xendit.com/docs/testing' );
+			$this->description .= ' ' . sprintf( __( 'TEST MODE ENABLED. Try card "4000000000000002" with any CVC and future expiration date, or see <a href="%s">Xendit Docs</a> for more test cases.', 'woocommerce-gateway-xendit' ), 'https://xendit.com/docs/testing' );
 			$this->description  = trim( $this->description );
 		}
 
@@ -172,7 +172,7 @@ class WC_Gateway_Xendit extends WC_Payment_Gateway_CC {
 		if ( ! $currency ) {
 			$currency = get_woocommerce_currency();
 		}
-		$total = round( $total, 2 ) * 10;
+		$total = $total;
 
 		echo '<script>var total = '.$total.'</script>';
 		return $total;
@@ -417,7 +417,7 @@ class WC_Gateway_Xendit extends WC_Payment_Gateway_CC {
 		$post_data['amount']      = $amount;
 		$post_data['token_id']    = $token_id;
 		$post_data['authentication_id']  = $auth_id;
-		$post_data['external_id'] = $this->generate_external_id();
+		$post_data['external_id'] = "WC_Order_" . $order->get_id();
 
 		return $post_data;
 	}
