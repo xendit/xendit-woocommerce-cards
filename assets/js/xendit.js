@@ -61,12 +61,12 @@ jQuery( function( $ ) {
 					this.clearToken
 				)
 				.ready(function () {
-					$('.woocommerce').append('<div class="overlay" style="display: none;"></div>' +
+					$('body').append('<div class="overlay" style="display: none;"></div>' +
 		            	'<div id="three-ds-container" style="display: none;">' +
 		                	'<iframe height="450" width="550" id="sample-inline-frame" name="sample-inline-frame"> </iframe>' +
 		            	'</div>');
 
-					$('.woocommerce').append(
+					$('body').append(
 						'<div id="error" style="display: none;">' +
 							'<pre>' +
 				                '<p>Whoops! There was an error while processing your request. </p>' +
@@ -77,7 +77,7 @@ jQuery( function( $ ) {
 
 
 					$('.overlay').css({'position': 'absolute','top': '0','left': '0','height': '100%','width': '100%','background-color': 'rgba(0,0,0,0.5)','z-index': '10'});
-					$('#three-ds-container').css({'width': '550px','height': '450px','line-height': '200px','position': 'fixed','top': '25%','left': '40%','margin-top': '-100px','margin-left': '-150px','background-color': '#ffffff','border-radius': '5px','text-align': 'center','z-index': '1000'});
+					$('#three-ds-container').css({'width': '550px','height': '450px','line-height': '200px','position': 'fixed','top': '25%','left': '40%','margin-top': '-100px','margin-left': '-150px','background-color': '#ffffff','border-radius': '5px','text-align': 'center','z-index': '9999'});
 					$('#error').css({color: 'red', 'width': '100%'});
 				});
 		},
