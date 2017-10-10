@@ -606,7 +606,7 @@ class WC_Gateway_Xendit extends WC_Payment_Gateway_CC {
         if ($response->status === 'FAILED') {
           $localized_messages = $this->get_localized_messages();
 
-					$message = 'Card charge failure';
+					$message = 'Card charge failure. Reason: ' . $response->failure_reason;
 
 					$order->add_order_note( $message );
 

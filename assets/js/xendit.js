@@ -66,19 +66,11 @@ jQuery( function( $ ) {
 		                	'<iframe height="450" width="550" id="sample-inline-frame" name="sample-inline-frame"> </iframe>' +
 		            	'</div>');
 
-					$('body').append(
-						'<div id="error" style="display: none;">' +
-							'<pre>' +
-				                '<p>Whoops! There was an error while processing your request. </p>' +
-								'<p>Please check your credit card details and try again. <br/> <a href="https://www.xendit.co/en/contact/" >Contact Xendit Support</a> if the problem persists. </p>' +
-								'<p class="result"></p>' +
-							'</pre>' +
-			            '</div>' );
+					$('.entry-content .woocommerce').prepend('<div id="woocommerce-error-custom-my" class="woocommerce-error" style="display:none"></div>');
 
 
 					$('.overlay').css({'position': 'absolute','top': '0','left': '0','height': '100%','width': '100%','background-color': 'rgba(0,0,0,0.5)','z-index': '10'});
 					$('#three-ds-container').css({'width': '550px','height': '450px','line-height': '200px','position': 'fixed','top': '25%','left': '40%','margin-top': '-100px','margin-left': '-150px','background-color': '#ffffff','border-radius': '5px','text-align': 'center','z-index': '9999'});
-					$('#error').css({color: 'red', 'width': '100%'});
 				});
 		},
 
@@ -105,12 +97,19 @@ jQuery( function( $ ) {
 		},
 
 		onError: function( e, response ) {
-			console.log(response);
-			//TODO: do something here (pop up authentication fail)
+      var failure_reason
+      if(typeof response != 'undefined') {
+        failure_reason = JSON.stringify(response.err.error_code || response.err.message, null, 4)
+      } else {
+        failure_reason = JSON.stringify(e.failure_reason || e.status, null, 4)
+      }
 			$('#three-ds-container').hide();
 			$('.overlay').hide();
-			$('#error .result').text('Failure Reason: ' + JSON.stringify(response.failure_reason || response.err.message, null, 4));
-			$('#error').show();
+			$('#woocommerce-error-custom-my').html('Failed. Failure Reason: ' + failure_reason);
+			$('#woocommerce-error-custom-my').show();
+      $('html, body').animate({
+        scrollTop: $(".entry-content").offset().top
+      }, 2000);
 			wc_xendit_form.unblock();
 		},
 
@@ -167,6 +166,8 @@ jQuery( function( $ ) {
 			var authentication_id = response.id;
 
 			if (response.status === 'APPROVED' || response.status === 'VERIFIED') {
+        $('.overlay').hide();
+				$('#three-ds-container').hide();
 				wc_xendit_form.form.append( "<input type='hidden' class='xendit_authentication' name='xendit_authentication' value='" + authentication_id + "'/>" );
 				wc_xendit_form.form.submit();
 			} else if (response.status === 'IN_REVIEW') {
