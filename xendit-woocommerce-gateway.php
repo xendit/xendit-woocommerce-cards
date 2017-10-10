@@ -1,12 +1,12 @@
 <?php
 if ( ! defined( 'ABSPATH' ) ) exit;
 /*
-Plugin Name: Xendit Woocommerce Gateway
-Plugin URI: #
-Description: Accept payments in Indonesia with Xendit. Seamlessly integrated into WooCommerce.
-Version: 1.0
+Plugin Name: WooCommerce - Xendit Gateway
+Plugin URI: https://github.com/xendit/xendit-woocommerce-cards
+Description: Accept Credit/Debit cards with Xendit. Works with WooCommerce & Subscriptions.
+Version: 1.1
 Author: Xendit
-Author URI: #
+Author URI: https://www.xendit.co/
 */
 
 /**

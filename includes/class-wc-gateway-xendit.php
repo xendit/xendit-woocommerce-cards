@@ -184,7 +184,7 @@ class WC_Gateway_Xendit extends WC_Payment_Gateway_CC {
 	public function is_available() {
 		if ( 'yes' === $this->enabled ) {
 			if ( ! $this->testmode && is_checkout() ) {
-				return false;
+				return true;
 			}
 			if ( ! $this->secret_key || ! $this->publishable_key ) {
 				return false;
