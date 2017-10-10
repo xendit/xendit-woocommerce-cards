@@ -603,6 +603,16 @@ class WC_Gateway_Xendit extends WC_Payment_Gateway_CC {
 					throw new Exception( $message );
 				}
 
+        if ($response->status === 'FAILED') {
+          $localized_messages = $this->get_localized_messages();
+
+					$message = 'Card charge failure';
+
+					$order->add_order_note( $message );
+
+          throw new Exception( $message );
+        }
+
 				// Process valid response.
 				$this->process_response( $response, $order );
 			} else {
