@@ -117,7 +117,7 @@ class WC_Gateway_Xendit extends WC_Payment_Gateway_CC {
 		$this->description             = $this->get_option( 'description' );
 		$this->enabled                 = $this->get_option( 'enabled' );
 		$this->testmode                = 'yes' === $this->get_option( 'testmode' );
-		$this->capture                 = 'yes' === $this->get_option( 'capture', 'yes' );
+		$this->capture                 = true;
 		$this->statement_descriptor    = $this->get_option( 'statement_descriptor', wp_specialchars_decode( get_bloginfo( 'name' ), ENT_QUOTES ) );
 		$this->xendit_checkout         = 'yes' === $this->get_option( 'xendit_checkout' );
 		$this->xendit_checkout_locale  = $this->get_option( 'xendit_checkout_locale' );
