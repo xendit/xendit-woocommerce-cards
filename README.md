@@ -3,11 +3,11 @@
 - Add some simple & subscription products
 
 ## Installation
-1. Download this repository as a ZIP file
+1. Download this repository ZIP (**Clone or Download** > **Download ZIP**)
 1. Login & Navigate to your WordPress Dashboard
 1. Go to Plugins > Add New > Upload Plugin
 1. Upload the Xendit Gateway ZIP file
-1. Activate the Xendit Gateway plugin 
+1. Click `Activate Plugin`
 
 ## Configure Xendit
 Go to WooCommerce > Settings > Checkout > Xendit
