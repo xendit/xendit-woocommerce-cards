@@ -1,7 +1,3 @@
-## Prep
-- Install WordPress, WooCommerce, and WooCommerce Subscriptions
-- Add some simple & subscription products
-
 # Getting Started
 
 ## Install Plugin
@@ -24,14 +20,18 @@ Go to WooCommerce > Settings > General > Currency options
 1. Set **Number of decimals** to `0`
 
 # Testing
-1. Test [Authentication Cases](https://dashboard.xendit.co/docs/testing-payments#cards-authentication)
-1. Test [Charge Failure Reasons](https://dashboard.xendit.co/docs/testing-payments#cards-authorization)
+1. Test [Authentication Cases](https://dashboard.xendit.co/docs/testing-payments#cards-authentication):
+    + **3DS Passed**: 4000000000000002
+    + **3DS Failed**: 4000000000000010
+    + **3DS Not Enrolled**: 5200000000000056
 
-For easy testing of charge failure reasons, we recommend adding test products with these prices to your WooCommerce Products:
-- SUCCESS: Rp 10000
-- CARD_DECLINED: Rp 5001
-- INSUFFICIENT_BALANCE: Rp 5004
-- INACTIVE_CARD: Rp 5006
+1. Test [Charge Failure Reasons](https://dashboard.xendit.co/docs/testing-payments#cards-authorization). Adding test products with these exact prices can make it easier to test these cases:
+    + **SUCCESS**: Rp 10000
+    + **CARD_DECLINED**: Rp 5001
+    + **INSUFFICIENT_BALANCE**: Rp 5004
+    + **INACTIVE_CARD**: Rp 5006
+    
+1. If using Subscriptions, we recommend following instructions in the WooCommerce [Testing Subscription Renewal Payments](https://docs.woocommerce.com/document/testing-subscription-renewal-payments/) guide.
 
 # Updating
 1. Deactivate the plugin

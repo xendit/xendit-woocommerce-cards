@@ -132,7 +132,7 @@ class WC_Gateway_Xendit extends WC_Payment_Gateway_CC {
 		}
 
 		if ( $this->testmode ) {
-			$this->description .= ' ' . sprintf( __( 'TEST MODE ENABLED. Try card "4000000000000002" with any CVC and future expiration date, or see <a href="%s">Xendit Docs</a> for more test cases.', 'woocommerce-gateway-xendit' ), 'https://xendit.com/docs/testing' );
+			$this->description .= ' ' . sprintf( __( 'TEST MODE. Try card "4000000000000002" with any CVN and future expiration date, or see <a href="%s">Xendit Docs</a> for more test cases.', 'woocommerce-gateway-xendit' ), 'https://dashboard.xendit.co/docs/' );
 			$this->description  = trim( $this->description );
 		}
 
