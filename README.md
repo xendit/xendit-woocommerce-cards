@@ -18,6 +18,7 @@ Go to WooCommerce > Settings > Checkout > Xendit
 Go to WooCommerce > Settings > General > Currency options
 1. Set **Currency** to `Indonesian rupiah (Rp)`
 1. Set **Number of decimals** to `0`
+1. Set **WooCommerce >> Settings >> Subscriptions** to "Accept Manual Renewals"
 
 # Testing
 1. Test [Authentication Cases](https://dashboard.xendit.co/docs/testing-payments#cards-authentication):
