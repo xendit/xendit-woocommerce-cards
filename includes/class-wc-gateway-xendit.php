@@ -559,12 +559,12 @@ class WC_Gateway_Xendit extends WC_Payment_Gateway_CC {
 				// Save new if there is one token
 
 				/*
-					$token->set_token( 'token here' );
-					$token->set_last4( '4124' );
-					$token->set_expiry_year( '2017' );
-					$token->set_expiry_month( '1' ); // incorrect length
-					$token->set_card_type( 'visa' );
-					var_dump( $token->validate() ); // bool(false)
+				$token->set_token( 'token here' );
+				$token->set_last4( '4124' );
+				$token->set_expiry_year( '2017' );
+				$token->set_expiry_month( '1' ); // incorrect length
+				$token->set_card_type( 'visa' );
+				var_dump( $token->validate() ); // bool(false)
 				*/
 
 				$this->log('response -> ' . print_r($response, true) . PHP_EOL);
@@ -603,15 +603,16 @@ class WC_Gateway_Xendit extends WC_Payment_Gateway_CC {
 					throw new Exception( $message );
 				}
 
-        if ($response->status === 'FAILED') {
-          $localized_messages = $this->get_localized_messages();
+				if ($response->status !== 'CAPTURED') {
+					$localized_messages = $this->get_localized_messages();
 
+					$this->log('Card charge failure. ' . $response->id . ' response -> ' . print_r($response, true) . PHP_EOL);
+					$order->update_status( 'failed', sprintf( __( 'Xendit charges (Charge ID:'.$response->id.').', 'woocommerce-gateway-xendit' ), $response->id ) );
 					$message = 'Card charge failure. Reason: ' . $response->failure_reason;
-
 					$order->add_order_note( $message );
 
-          throw new Exception( $message );
-        }
+					throw new Exception( $message );
+				}
 
 				// Process valid response.
 				$this->process_response( $response, $order );
@@ -692,23 +693,10 @@ class WC_Gateway_Xendit extends WC_Payment_Gateway_CC {
  			update_post_meta( $order_id, 'Net Revenue From Xendit', $net );
  		}
 
- 		if ( $response->status == 'CAPTURED') {
- 			$order->payment_complete( $response->id );
-
- 			$message = sprintf( __( 'Xendit charge complete (Charge ID: %s)', 'woocommerce-gateway-xendit' ), $response->id );
- 			$order->add_order_note( $message );
- 			$this->log( 'Success: ' . $message );
-
- 		} else {
- 			update_post_meta( $order_id, '_transaction_id', $response->id, true );
-
- 			if ( $order->has_status( array( 'pending', 'failed' ) ) ) {
- 				version_compare( WC_VERSION, '3.0.0', '<' ) ? $order->reduce_order_stock() : wc_reduce_stock_levels( $order_id );
- 			}
-
- 			$order->update_status( 'on-hold', sprintf( __( 'Xendit charge authorized (Charge ID: %s). Process order to take payment, or cancel to remove the pre-authorization.', 'woocommerce-gateway-xendit' ), $response->id ) );
- 			$this->log( "Successful auth: $response->id" );
- 		}
+ 		$order->payment_complete( $response->id );
+		$message = sprintf( __( 'Xendit charge complete (Charge ID: %s)', 'woocommerce-gateway-xendit' ), $response->id );
+		$order->add_order_note( $message );
+		$this->log( 'Success: ' . $message );
 
  		do_action( 'wc_gateway_xendit_process_response', $response, $order );
 
